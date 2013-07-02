@@ -3,6 +3,7 @@
 
 struct datafile;
 struct database;
+struct table;
 
 #define HASH_NR (1024 * 1024)
 
@@ -39,6 +40,8 @@ void buffer_clear_dirty(struct buffer * buf);
 void buffer_set_dirty(struct buffer * buf);
 int structure_read_buffer(struct datafile * df, void * structure, size_t size, int offset);
 int structure_write_buffer(struct datafile * df, void * structure, size_t size, int offset);
+
 void buffer_database_delete(struct database * db);
+void buffer_table_delete(struct table * tb);
 
 #endif

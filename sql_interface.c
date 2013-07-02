@@ -6,7 +6,7 @@
 #include <stdarg.h>
 
 #include "sql.h"
-
+#include "buffer.h" //for buffer_table_delete
 
 #define TEMP_SQL_FILE "temp.sql"
 #define TEMP_RESULT_FILE "result.tmp"
@@ -247,6 +247,12 @@ static struct table * check_table_name(GPtrArray * tbname_set, int idx_in_set,
     char prefix[EXP_MAX], name[EXP_MAX];
     value_in_set = (char *)g_ptr_array_index(tbname_set, idx_in_set);
     resolve_name(value_in_set, prefix, name);
+
+    if(strcmp(prefix, "") == 0 && cur_db == NULL) {
+        sprintf(sql->info, "SQL: no database using");
+        return NULL;
+    }
+
     *db = get_database(prefix);
     tb = get_table(*db, name);
     if(tb == NULL)
@@ -313,9 +319,13 @@ static int sql_create_table(struct sql_info * sql)
     char tbname[EXP_MAX];
     tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
     if(tb != NULL) {
-        sql->info[0] = 0;
+        strcpy("SQL: table %s exists", tbname);
         return 1;
     }
+    //no database using?
+    if(tb == NULL && strcmp(sql->info, "SQL: no database using") == 0)
+        return 1;
+
     //表名不得超出长度
     if(strlen(tbname) > NAMEMAX_LEN) {
         sprintf(sql->info, "SQL: table name %s exceeds limit", tbname);
@@ -379,9 +389,12 @@ static int sql_create_table(struct sql_info * sql)
                 tmpcols[i].c_notnull = 1;
             else if(strcmp(def, "UNIQUE") == 0)
                 tmpcols[i].c_unique = 1;
-            else if(strcmp(def, "PRIMARYKEY") == 0)
+            else if(strcmp(def, "PRIMARYKEY") == 0) {
+                //主键包含3种约束
                 tmpcols[i].c_pri_key = 1;
-            else if(strstr(def, "FOREIGNKEY") != NULL) {
+                tmpcols[i].c_notnull = 1;
+                tmpcols[i].c_unique = 1;
+            } else if(strstr(def, "FOREIGNKEY") != NULL) {
                 //外键约束，需要检查外键是否存在
                 fkname = strchr(def, ' ') + 1;
                 char fktbname[EXP_MAX], fkcolname[EXP_MAX];
@@ -433,7 +446,187 @@ static int sql_create_table(struct sql_info * sql)
     return 0;
 }
 
-struct update_info * sql_info_to_update_info(struct sql_info * sql) {
+static int sql_drop_table(struct sql_info * sql)
+{
+    struct table * tb;
+    struct database * db;
+    char tbname[EXP_MAX];
+    tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
+    if(tb == NULL)
+        return 1;
+
+    if(db == dic_db) {
+        sprintf(sql->info, "SQL: cannot drop dictionary table");
+        return 1;
+    }
+
+    //检查是否有链接到该表的外键
+    struct dataset * ds;
+    ds = run_sql("SELECT * FROM dictionary.columns WHERE fk_tbname=='%s' AND dbname=='%s';",
+                 tbname, db->d_header.dh_name);
+    int fkcount = ds->row_set->len;
+    dataset_destroy(ds);
+    if(fkcount > 0) {
+        sprintf(sql->info, "SQL: DROP fail, exist FOREIGN KEY constraint on table %s",
+                tbname);
+        return 1;
+    }
+
+    //标记块为已删除并且清除所有数据
+    struct block * b;
+    b = table_get_block(tb);
+    struct record * rec = record_new_instance(tb);
+    while(b) {
+        struct rnode_m * rn;
+        rnode_iter_initial(b);
+        while(rn = rnode_iter_block(b)) {
+            record_bind_rnode(rec, rn);
+            record_read_buffer(rec);
+            memset(rec->data, 0, tb->tb_record_size);
+            record_write_buffer(rec);
+
+            memset(&rn->r_node, 0, sizeof(struct rnode_d));
+            rnode_write_buffer(rn);
+            rnode_destroy(rn);
+        }
+
+        b->header.type = BLOCK_DELETED;
+        b->header.tb_continue = 0;
+        memset(b->header.tb_name, 0 , sizeof(b->header.tb_name));
+        memset(b->bitmap.bits, 0, b->header.bitmap_size);
+        block_write_buffer(b, b->header.block_start);
+        b->last_get_rnode_pid = 0;
+        b = b->tb_prev;
+    }
+    record_destroy(rec);
+
+    //清除缓存中与table有关的项
+    buffer_table_delete(tb);
+
+    //从db的tb链表中删除
+    struct table ** prev = &db->d_table;
+    while(*prev) {
+        if(*prev == tb) {
+            *prev = tb->tb_next;
+            break;
+        }
+        prev = &(*prev)->tb_next;
+    }
+    //清除数据字典
+    ds = run_sql("DELETE FROM dictionary.columns WHERE tbname=='%s' AND dbname=='%s';",
+                 tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+
+    ds = run_sql("DELETE FROM dictionary.tables WHERE tbname=='%s' AND dbname=='%s';",
+                 tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+
+    return 0;
+}
+
+static int sql_rename_table(struct sql_info * sql)
+{
+    struct table * tb;
+    struct database * db;
+    char tbname[EXP_MAX];
+    tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
+    if(tb == NULL)
+        return 1;
+
+    char * newname = (char*)g_ptr_array_index(sql->value_set, 0);
+
+    if(strlen(newname) > NAMEMAX_LEN) {
+        sprintf(sql->info, "SQL: name exceeds limit");
+        return 1;
+    }
+
+    //检查同名table是否已经存在
+    struct dataset * ds;
+    ds = run_sql("SELECT * FROM dictionary.tables WHERE dbname=='%s' AND tbname=='%s';",
+                 db->d_header.dh_name, newname);
+    int rowlen = ds->row_set->len;
+    dataset_destroy(ds);
+    if(rowlen > 0) {
+        sprintf(sql->info, "SQL: table %s exists", newname);
+        return 1;
+    }
+
+    //修改block数据
+    struct block * b = table_get_block(tb);
+    while(b) {
+        strcpy(b->header.tb_name, newname);
+        block_write_buffer(b, b->header.block_start);
+        b = b->tb_prev;
+    }
+
+    //修改数据字典
+
+    ds = run_sql("UPDATE dictionary.tables SET tbname='%s' WHERE tbname=='%s' AND dbname=='%s';",
+                 newname, tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+
+    ds = run_sql("UPDATE dictionary.columns SET tbname='%s' WHERE tbname=='%s' AND dbname=='%s';",
+                 newname, tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+
+    ds = run_sql("UPDATE dictionary.coumns SET fk_tbname='%s' WHERE fk_tbname=='%s' AND dbname=='%s';",
+                 newname, tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+
+    //最后修改table结构
+    strcpy(tb->tb_name, tbname);
+
+    return 0;
+}
+
+static int sql_rename_column(struct sql_info * sql)
+{
+    struct table * tb;
+    struct database * db;
+    char tbname[EXP_MAX];
+    tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
+    if(tb == NULL)
+        return 1;
+
+    char * old_colname = (char *)g_ptr_array_index(sql->value_set, 0);
+    char * new_colname = (char *)g_ptr_array_index(sql->value_set, 1);
+
+    if(strlen(new_colname) > NAMEMAX_LEN) {
+        sprintf(sql->info, "SQL: name exceeds limit");
+        return 1;
+    }
+
+    struct column * col;
+    col = check_column_name(sql->value_set, 0, tb, sql);
+    if(col == NULL)
+        return 1;
+
+    //内存中的数据结构
+    for(int i = 0; i < tb->tb_col_nr; i++) {
+        struct column * col_in_tb;
+        col_in_tb = &tb->tb_cols[i];
+        if(strcmp(col_in_tb->c_fk_colname, old_colname) == 0)
+            strcpy(col_in_tb->c_fk_colname, new_colname);
+    }
+
+    strcpy(col->c_name, new_colname);
+
+    //数据字典
+    struct dataset * ds;
+    ds = run_sql("UPDATE dictionary.columns SET colname='%s' "
+                 "WHERE dbname=='%s' AND tbname=='%s' AND colname=='%s';",
+                 new_colname, db->d_header.dh_name, tb->tb_name, old_colname);
+    dataset_destroy(ds);
+
+    ds = run_sql("UPDATE dictionary.columns SET fk_colname='%s' "
+                 "WHERE dbname=='%s' AND fk_tbname=='%s' AND fk_colname=='%s';",
+                 new_colname, db->d_header.dh_name, tb->tb_name, old_colname);
+    dataset_destroy(ds);
+
+    return 0;
+}
+
+static struct update_info * sql_info_to_update_info(struct sql_info * sql) {
     //表达式数量和列数一致
     assert(sql->column_set->len == sql->expression_set->len);
 
@@ -517,14 +710,7 @@ struct update_info * sql_info_to_update_info(struct sql_info * sql) {
     return ui;
 }
 
-struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
-    //列名和参数数量必须一致
-    if(sql->column_set->len != 0 &&
-       sql->column_set->len != sql->value_set->len) {
-        sprintf(sql->info, "SQL: inconsistent number of column and value");
-        return NULL;
-    }
-
+static struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
     struct insert_info * ii;
     ii = insert_info_new_instance();
 
@@ -541,6 +727,15 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
         return NULL;
     }
     table_set_add_table(ii->table, tb);
+
+    //列名和参数数量必须一致
+    if((sql->column_set->len != 0 &&
+        sql->column_set->len != sql->value_set->len) ||
+       (sql->column_set->len == 0 &&
+        tb->tb_col_nr != sql->value_set->len)) {
+        sprintf(sql->info, "SQL: inconsistent number of column and value");
+        return NULL;
+    }
 
     //检查column，insert_info不需要column信息，但先做检查保证接下来的检查正确性
     //INSERT语句没有指定列名时len为0，会跳过for语句
@@ -622,7 +817,7 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
     return ii;
 }
 
-struct delete_info * sql_info_to_delete_info(struct sql_info * sql) {
+static struct delete_info * sql_info_to_delete_info(struct sql_info * sql) {
     struct delete_info * di;
     di = delete_info_new_instance();
 
@@ -646,7 +841,7 @@ struct delete_info * sql_info_to_delete_info(struct sql_info * sql) {
     return di;
 }
 
-struct select_info * sql_info_to_select_info(struct sql_info * sql) {
+static struct select_info * sql_info_to_select_info(struct sql_info * sql) {
     struct select_info * si;
     si = select_info_new_instance();
 
@@ -763,7 +958,6 @@ struct dataset * sql_info_run(struct sql_info * sql) {
             else
                 ds = dataset_error(((struct update_info *)structure)->info);
             update_info_destroy((struct update_info *)structure);
-
         }
         break;
     case SQL_CREATE_DB:
@@ -791,6 +985,27 @@ struct dataset * sql_info_run(struct sql_info * sql) {
         result = sql_create_table(sql);
         if(result == 0)
             ds = dataset_info("TABLE created");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_DROP_TB:
+        result = sql_drop_table(sql);
+        if(result == 0)
+            ds = dataset_info("TABLE droped");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_RENAME_TB:
+        result = sql_rename_table(sql);
+        if(result == 0)
+            ds = dataset_info("TABLE renamed");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_RENAME_COL:
+        result = sql_rename_column(sql);
+        if(result == 0)
+            ds = dataset_info("COLUMN renamed");
         else
             ds = dataset_error(sql->info);
         break;
@@ -834,6 +1049,8 @@ static struct dataset * _run_sql(char * sql) {
 
     sql_info_destroy(cur_sql, result);
     cur_sql = lastsql;
+    buffer_flush();
+
     return ds;
 }
 
@@ -846,13 +1063,10 @@ struct dataset * run_sql(char * sql, ...) {
     return _run_sql(sqlstr);
 }
 
-#include "buffer.h"
-
 void main()
 {
     initial_buffer(1024 * 1024, 4096);
     initial_dictionary();
-    cur_db = dic_db;
     //search_dic_database("dictionary");
     char sql[1024];
     struct dataset * ds;

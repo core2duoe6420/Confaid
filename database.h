@@ -75,6 +75,8 @@ void bitmap_write_buffer(struct datafile * df, struct bitmap * bm, int offset);
 void block_release_piece(struct block * b, int pid);
 void piece_set_zero(struct block * b, int pid);
 
+void block_write_buffer(struct block * b, int offset);
+
 struct block * database_create_block(struct database * db, char * tb_name, size_t piece_size);
 struct database * _database_create(char * db_file, char * db_name, size_t block_size);
 struct database * _database_initial(char * db_file);

@@ -31,36 +31,6 @@ void insert_info_destroy(struct insert_info * ii)
     g_free(ii);
 }
 
-static int value_is_null(struct column * col, char * value)
-{
-    static int initialized = 0;
-    static char char_null_str[EXP_MAX];
-    static char int_null_str[EXP_MAX];
-    static char double_null_str[EXP_MAX];
-
-    if(initialized == 0) {
-        initialized = 1;
-        sprintf(char_null_str, "%s", CHAR_NULL);
-        sprintf(int_null_str, "%d", INT_NULL);
-        sprintf(double_null_str, "%lf", DOUBLE_NULL);
-    }
-
-    int ret;
-    switch(col->c_type) {
-    case COL_CHAR:
-        ret = strcmp(value, char_null_str);
-        break;
-    case COL_INT:
-        ret = strcmp(value, int_null_str);
-        break;
-    case COL_DOUBLE:
-        ret = strcmp(value, double_null_str);
-        break;
-    }
-
-    return ret == 0;
-}
-
 /* 我们假定这里给出的ii已经验证过NOT NULL和类型
  */
 int insert_info_run(struct insert_info * ii)

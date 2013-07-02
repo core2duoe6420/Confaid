@@ -509,16 +509,16 @@ static const yytype_int8 yyrhs[] = {
 
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] = {
-    0,    53,    53,    54,    58,    59,    60,    61,    62,    63,
-    67,    71,    72,    73,    74,    75,    80,    87,    89,    94,
-    95,   100,   111,   113,   117,   118,   119,   120,   125,   126,
-    129,   131,   134,   136,   139,   141,   142,   146,   150,   151,
-    152,   153,   154,   155,   159,   163,   167,   176,   180,   181,
-    185,   186,   190,   194,   198,   199,   203,   219,   231,   236,
-    238,   242,   247,   256,   263,   267,   268,   272,   275,   277,
-    281,   282,   287,   288,   289,   290,   291,   296,   301,   315,
-    316,   317,   318,   319,   320,   321,   325,   326,   330,   334,
-    338,   339,   345,   346,   350,   351,   356,   357,   358,   364
+    0,    53,    53,    54,    58,    59,    60,    61,    63,    64,
+    68,    72,    73,    74,    75,    77,    84,    91,    93,    98,
+    99,   104,   115,   117,   121,   122,   123,   124,   129,   130,
+    133,   135,   138,   140,   143,   145,   146,   150,   154,   155,
+    156,   157,   158,   159,   163,   167,   171,   180,   184,   185,
+    189,   190,   194,   198,   202,   203,   207,   223,   235,   240,
+    242,   246,   251,   260,   267,   271,   272,   276,   279,   281,
+    285,   286,   291,   292,   293,   294,   295,   300,   305,   319,
+    320,   321,   322,   323,   324,   325,   329,   330,   334,   338,
+    342,   343,   349,   350,   354,   355,   360,   361,   362,   368
 };
 #endif
 
@@ -1546,24 +1546,62 @@ yyreduce:
     { cur_sql->type = SQL_DROP_DB; ;}
     break;
 
-    case 9:
+    case 7:
+
+        /* Line 1455 of yacc.c  */
+#line 61 "sql_parser.y"
+    {
+        g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (3)].strval)));
+        cur_sql->type = SQL_DROP_TB; ;
+    }
+    break;
+
+    case 8:
 
         /* Line 1455 of yacc.c  */
 #line 63 "sql_parser.y"
+    { g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (4)].strval))); ;}
+    break;
+
+    case 9:
+
+        /* Line 1455 of yacc.c  */
+#line 64 "sql_parser.y"
     { cur_sql->type = SQL_CREATE_TB; ;}
     break;
 
     case 10:
 
         /* Line 1455 of yacc.c  */
-#line 67 "sql_parser.y"
+#line 68 "sql_parser.y"
     { g_ptr_array_add(cur_sql->database_set, strdup((yyvsp[(1) - (1)].strval))); ;}
+    break;
+
+    case 14:
+
+        /* Line 1455 of yacc.c  */
+#line 75 "sql_parser.y"
+    {
+        cur_sql->type = SQL_RENAME_TB;
+        g_ptr_array_add(cur_sql->value_set, strdup((yyvsp[(3) - (3)].strval))); ;
+    }
+    break;
+
+    case 15:
+
+        /* Line 1455 of yacc.c  */
+#line 77 "sql_parser.y"
+    {
+        cur_sql->type = SQL_RENAME_COL;
+        g_ptr_array_add(cur_sql->value_set, strdup((yyvsp[(2) - (4)].strval)));
+        g_ptr_array_add(cur_sql->value_set, strdup((yyvsp[(4) - (4)].strval))); ;
+    }
     break;
 
     case 16:
 
         /* Line 1455 of yacc.c  */
-#line 80 "sql_parser.y"
+#line 84 "sql_parser.y"
     {
         g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (6)].strval)));
         cur_sql->column_set = cur_sql->cur_col_set;
@@ -1575,7 +1613,7 @@ yyreduce:
     case 18:
 
         /* Line 1455 of yacc.c  */
-#line 89 "sql_parser.y"
+#line 93 "sql_parser.y"
     {
         char tmp[1024];
         sprintf(tmp, "%d", (yyvsp[(3) - (3)].floatval));
@@ -1586,7 +1624,7 @@ yyreduce:
     case 21:
 
         /* Line 1455 of yacc.c  */
-#line 100 "sql_parser.y"
+#line 104 "sql_parser.y"
     {
         cur_sql->col_def_set[cur_sql->cur_col_set->len] = cur_sql->cur_col_def;
 
@@ -1602,91 +1640,91 @@ yyreduce:
     case 23:
 
         /* Line 1455 of yacc.c  */
-#line 113 "sql_parser.y"
+#line 117 "sql_parser.y"
     { g_ptr_array_add(cur_sql->cur_col_def, strdup((yyvsp[(2) - (2)].strval))); ;}
     break;
 
     case 24:
 
         /* Line 1455 of yacc.c  */
-#line 117 "sql_parser.y"
+#line 121 "sql_parser.y"
     { sprintf((yyval.strval), "NOTNULL"); ;}
     break;
 
     case 25:
 
         /* Line 1455 of yacc.c  */
-#line 118 "sql_parser.y"
+#line 122 "sql_parser.y"
     { sprintf((yyval.strval), "UNIQUE"); ;}
     break;
 
     case 26:
 
         /* Line 1455 of yacc.c  */
-#line 119 "sql_parser.y"
+#line 123 "sql_parser.y"
     { sprintf((yyval.strval), "PRIMARYKEY"); ;}
     break;
 
     case 27:
 
         /* Line 1455 of yacc.c  */
-#line 120 "sql_parser.y"
+#line 124 "sql_parser.y"
     { sprintf((yyval.strval), "FOREIGNKEY %s.%s", (yyvsp[(4) - (7)].strval), (yyvsp[(6) - (7)].strval)); ;}
     break;
 
     case 28:
 
         /* Line 1455 of yacc.c  */
-#line 125 "sql_parser.y"
+#line 129 "sql_parser.y"
     { g_ptr_array_add(cur_sql->cur_col_set, strdup((yyvsp[(1) - (1)].strval))); ;}
     break;
 
     case 29:
 
         /* Line 1455 of yacc.c  */
-#line 126 "sql_parser.y"
+#line 130 "sql_parser.y"
     { g_ptr_array_add(cur_sql->cur_col_set, strdup((yyvsp[(3) - (3)].strval))); ;}
     break;
 
     case 39:
 
         /* Line 1455 of yacc.c  */
-#line 151 "sql_parser.y"
+#line 155 "sql_parser.y"
     { cur_sql->type = SQL_DELETE; ;}
     break;
 
     case 40:
 
         /* Line 1455 of yacc.c  */
-#line 152 "sql_parser.y"
+#line 156 "sql_parser.y"
     { cur_sql->type = SQL_INSERT; ;}
     break;
 
     case 42:
 
         /* Line 1455 of yacc.c  */
-#line 154 "sql_parser.y"
+#line 158 "sql_parser.y"
     { cur_sql->type = SQL_SELECT; ;}
     break;
 
     case 43:
 
         /* Line 1455 of yacc.c  */
-#line 155 "sql_parser.y"
+#line 159 "sql_parser.y"
     { cur_sql->type = SQL_UPDATE; ;}
     break;
 
     case 45:
 
         /* Line 1455 of yacc.c  */
-#line 163 "sql_parser.y"
+#line 167 "sql_parser.y"
     { g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (4)].strval))); ;}
     break;
 
     case 46:
 
         /* Line 1455 of yacc.c  */
-#line 167 "sql_parser.y"
+#line 171 "sql_parser.y"
     {
         g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (5)].strval)));
         cur_sql->column_set = cur_sql->cur_col_set;
@@ -1699,21 +1737,21 @@ yyreduce:
     case 50:
 
         /* Line 1455 of yacc.c  */
-#line 185 "sql_parser.y"
+#line 189 "sql_parser.y"
     { g_ptr_array_add(cur_sql->value_set, strdup((yyvsp[(1) - (1)].strval))); ;}
     break;
 
     case 51:
 
         /* Line 1455 of yacc.c  */
-#line 186 "sql_parser.y"
+#line 190 "sql_parser.y"
     { g_ptr_array_add(cur_sql->value_set, NULL); ;}
     break;
 
     case 56:
 
         /* Line 1455 of yacc.c  */
-#line 203 "sql_parser.y"
+#line 207 "sql_parser.y"
     {
         //update语句列引用和scalar_exp中的列引用同时规约，不能使用cur_col_set
         if(cur_sql->column_set == NULL) {
@@ -1736,7 +1774,7 @@ yyreduce:
     case 57:
 
         /* Line 1455 of yacc.c  */
-#line 219 "sql_parser.y"
+#line 223 "sql_parser.y"
     {
         if(cur_sql->column_set == NULL) {
             cur_sql->column_set = g_ptr_array_sized_new(2);
@@ -1752,7 +1790,7 @@ yyreduce:
     case 58:
 
         /* Line 1455 of yacc.c  */
-#line 231 "sql_parser.y"
+#line 235 "sql_parser.y"
     {
         g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(2) - (5)].strval)));
         ;
@@ -1762,7 +1800,7 @@ yyreduce:
     case 61:
 
         /* Line 1455 of yacc.c  */
-#line 242 "sql_parser.y"
+#line 246 "sql_parser.y"
     {
         cur_sql->column_set = cur_sql->cur_col_set;
         cur_sql->cur_col_set = g_ptr_array_sized_new(8);
@@ -1774,7 +1812,7 @@ yyreduce:
     case 62:
 
         /* Line 1455 of yacc.c  */
-#line 247 "sql_parser.y"
+#line 251 "sql_parser.y"
     {
         g_ptr_array_add(cur_sql->cur_col_set, strdup("*"));
         cur_sql->column_set = cur_sql->cur_col_set;
@@ -1787,63 +1825,63 @@ yyreduce:
     case 65:
 
         /* Line 1455 of yacc.c  */
-#line 267 "sql_parser.y"
+#line 271 "sql_parser.y"
     { g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(1) - (1)].strval))); ;}
     break;
 
     case 66:
 
         /* Line 1455 of yacc.c  */
-#line 268 "sql_parser.y"
+#line 272 "sql_parser.y"
     { g_ptr_array_add(cur_sql->table_set, strdup((yyvsp[(3) - (3)].strval))); ;}
     break;
 
     case 67:
 
         /* Line 1455 of yacc.c  */
-#line 272 "sql_parser.y"
+#line 276 "sql_parser.y"
     { strcpy(cur_sql->cond_formula, (yyvsp[(2) - (2)].strval)); ;}
     break;
 
     case 72:
 
         /* Line 1455 of yacc.c  */
-#line 287 "sql_parser.y"
+#line 291 "sql_parser.y"
     { sprintf((yyval.strval), "%s+%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 73:
 
         /* Line 1455 of yacc.c  */
-#line 288 "sql_parser.y"
+#line 292 "sql_parser.y"
     { sprintf((yyval.strval), "%s*%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 74:
 
         /* Line 1455 of yacc.c  */
-#line 289 "sql_parser.y"
+#line 293 "sql_parser.y"
     { sprintf((yyval.strval), "~%s", (yyvsp[(2) - (2)].strval)); ;}
     break;
 
     case 75:
 
         /* Line 1455 of yacc.c  */
-#line 290 "sql_parser.y"
+#line 294 "sql_parser.y"
     { sprintf((yyval.strval), "(%s)", (yyvsp[(2) - (3)].strval)); ;}
     break;
 
     case 76:
 
         /* Line 1455 of yacc.c  */
-#line 291 "sql_parser.y"
+#line 295 "sql_parser.y"
     { sprintf((yyval.strval), "c"); ;}
     break;
 
     case 78:
 
         /* Line 1455 of yacc.c  */
-#line 301 "sql_parser.y"
+#line 305 "sql_parser.y"
     {
         cur_sql->cond_refcol_set[cur_sql->condition_set->len] = cur_sql->cur_col_set;
 
@@ -1860,140 +1898,140 @@ yyreduce:
     case 79:
 
         /* Line 1455 of yacc.c  */
-#line 315 "sql_parser.y"
+#line 319 "sql_parser.y"
     { sprintf((yyval.strval), "%s+%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 80:
 
         /* Line 1455 of yacc.c  */
-#line 316 "sql_parser.y"
+#line 320 "sql_parser.y"
     { sprintf((yyval.strval), "%s-%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 81:
 
         /* Line 1455 of yacc.c  */
-#line 317 "sql_parser.y"
+#line 321 "sql_parser.y"
     { sprintf((yyval.strval), "%s*%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 82:
 
         /* Line 1455 of yacc.c  */
-#line 318 "sql_parser.y"
+#line 322 "sql_parser.y"
     { sprintf((yyval.strval), "%s/%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 83:
 
         /* Line 1455 of yacc.c  */
-#line 319 "sql_parser.y"
+#line 323 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); ;}
     break;
 
     case 84:
 
         /* Line 1455 of yacc.c  */
-#line 320 "sql_parser.y"
+#line 324 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); g_ptr_array_add(cur_sql->cur_col_set, strdup((yyvsp[(1) - (1)].strval))); ;}
     break;
 
     case 85:
 
         /* Line 1455 of yacc.c  */
-#line 321 "sql_parser.y"
+#line 325 "sql_parser.y"
     { sprintf((yyval.strval), "(%s)", (yyvsp[(2) - (3)].strval)); ;}
     break;
 
     case 88:
 
         /* Line 1455 of yacc.c  */
-#line 330 "sql_parser.y"
+#line 334 "sql_parser.y"
     { g_ptr_array_add(cur_sql->cur_col_set, strdup((yyvsp[(1) - (1)].strval))); ;}
     break;
 
     case 89:
 
         /* Line 1455 of yacc.c  */
-#line 334 "sql_parser.y"
+#line 338 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); ;}
     break;
 
     case 90:
 
         /* Line 1455 of yacc.c  */
-#line 338 "sql_parser.y"
+#line 342 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); strreplace((yyval.strval), "'", "", 256); ;}
     break;
 
     case 91:
 
         /* Line 1455 of yacc.c  */
-#line 339 "sql_parser.y"
+#line 343 "sql_parser.y"
     { sprintf((yyval.strval), "%lf", (yyvsp[(1) - (1)].floatval)); ;}
     break;
 
     case 92:
 
         /* Line 1455 of yacc.c  */
-#line 345 "sql_parser.y"
+#line 349 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); ;}
     break;
 
     case 93:
 
         /* Line 1455 of yacc.c  */
-#line 346 "sql_parser.y"
+#line 350 "sql_parser.y"
     { sprintf((yyval.strval), "%s.%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 94:
 
         /* Line 1455 of yacc.c  */
-#line 350 "sql_parser.y"
+#line 354 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); ;}
     break;
 
     case 95:
 
         /* Line 1455 of yacc.c  */
-#line 351 "sql_parser.y"
+#line 355 "sql_parser.y"
     { sprintf((yyval.strval), "%s.%s", (yyvsp[(1) - (3)].strval), (yyvsp[(3) - (3)].strval)); ;}
     break;
 
     case 96:
 
         /* Line 1455 of yacc.c  */
-#line 356 "sql_parser.y"
+#line 360 "sql_parser.y"
     { sprintf((yyval.strval), "%lf", (yyvsp[(3) - (4)].floatval)); ;}
     break;
 
     case 97:
 
         /* Line 1455 of yacc.c  */
-#line 357 "sql_parser.y"
+#line 361 "sql_parser.y"
     { sprintf((yyval.strval), "-1"); ;}
     break;
 
     case 98:
 
         /* Line 1455 of yacc.c  */
-#line 358 "sql_parser.y"
+#line 362 "sql_parser.y"
     { sprintf((yyval.strval), "-2"); ;}
     break;
 
     case 99:
 
         /* Line 1455 of yacc.c  */
-#line 364 "sql_parser.y"
+#line 368 "sql_parser.y"
     { sprintf((yyval.strval), "%s", (yyvsp[(1) - (1)].strval)); ;}
     break;
 
 
 
     /* Line 1455 of yacc.c  */
-#line 2022 "sql_parser.tab.c"
+#line 2054 "sql_parser.tab.c"
     default:
         break;
     }
@@ -2192,6 +2230,6 @@ yyreturn:
 
 
 /* Line 1675 of yacc.c  */
-#line 366 "sql_parser.y"
+#line 370 "sql_parser.y"
 
 

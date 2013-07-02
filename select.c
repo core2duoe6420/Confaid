@@ -27,7 +27,6 @@ void select_info_destroy(struct select_info * si)
     g_free(si);
 }
 
-
 struct dataset * select_info_run(struct select_info * si) {
     struct dataset * ds, * tmp;
     struct table * tb;

@@ -46,5 +46,6 @@ int rnode_remove(struct rnode_m * rn);
 void rnode_iter_initial(struct block * b);
 struct rnode_m * rnode_iter_block(struct block * b);
 void rnode_destroy(struct rnode_m * rn);
+void rnode_write_buffer(struct rnode_m * rn);
 
 #endif

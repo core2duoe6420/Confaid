@@ -56,11 +56,11 @@ struct piece * piece_new_instance(struct block * b, int pid) {
 
     assert(p);
 
-    p->p_data = (char *)g_malloc(b->header.piece_size);
+    p->p_data = (char *)g_malloc0(b->header.piece_size);
 
     assert(p->p_data);
 
-    memset(p->p_data, 0, b->header.piece_size);
+    //memset(p->p_data, 0, b->header.piece_size);
 
     p->p_block = b;
     p->p_pid = pid;
@@ -360,6 +360,11 @@ struct database * normal_database_open(char * db_name) {
     while(b) {
         struct table * tb;
         char * tbname;
+        //已删除，直接跳过
+        if(b->header.type == BLOCK_DELETED) {
+            b = b->prev;
+            continue;
+        }
         tbname = b->header.tb_name;
         tb = table_get_by_name(db, tbname);
 

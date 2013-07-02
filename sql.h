@@ -176,6 +176,9 @@ int insert_info_run(struct insert_info * ii);
 #define SQL_USE_DB 6
 #define SQL_DROP_DB 7
 #define SQL_CREATE_TB 8
+#define SQL_DROP_TB 9
+#define SQL_RENAME_TB 10
+#define SQL_RENAME_COL 11
 
 /* 除特殊情况，其他GPtrArray存放的都是char*指针 */
 struct sql_info {

@@ -58,8 +58,9 @@ sql:
 		USE database_name								{ cur_sql->type = SQL_USE_DB; }
 	|	CREATE DATABASE database_name block_size_def	{ cur_sql->type = SQL_CREATE_DB; }
 	|	DROP DATABASE database_name						{ cur_sql->type = SQL_DROP_DB; }
-	|	DROP TABLE table_name
-	|	ALTER TABLE table_name alter_operation
+	|	DROP TABLE table_name							{ g_ptr_array_add(cur_sql->table_set, strdup($3));
+															cur_sql->type = SQL_DROP_TB; }
+	|	ALTER TABLE table_name alter_operation			{ g_ptr_array_add(cur_sql->table_set, strdup($3)); }
 	|	base_table_def									{ cur_sql->type = SQL_CREATE_TB; }
 	;
 	
@@ -71,8 +72,11 @@ alter_operation:
 		ADD column data_type
 	|	DROP COLUMN column
 	|	ALTER COLUMN column data_type
-	|	RENAME TO table_name
-	|	RENAME column TO column
+	|	RENAME TO table_name							{ cur_sql->type = SQL_RENAME_TB;
+															g_ptr_array_add(cur_sql->value_set, strdup($3)); }
+	|	RENAME column TO column							{ cur_sql->type = SQL_RENAME_COL;
+															g_ptr_array_add(cur_sql->value_set, strdup($2));
+															g_ptr_array_add(cur_sql->value_set, strdup($4)); }
 	;
 	
 	/* ´´½¨±í */
