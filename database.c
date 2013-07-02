@@ -200,7 +200,8 @@ static void block_bind_database(struct block * b, struct database * db)
 
 static void block_destroy(struct block * b)
 {
-    g_free(b->bitmap.bits);
+    if(b->bitmap.bits)
+        g_free(b->bitmap.bits);
     g_free(b);
 }
 
@@ -435,12 +436,12 @@ void database_drop(char * dbname)
     database_close(dbname);
 
     struct dataset * ds;
-    ds = run_sql("SELECT tbname FROM dictionary.tables WHERE dbname=='%';", dbname);
+    ds = run_sql("SELECT tbname FROM dictionary.tables WHERE dbname=='%s';", dbname);
     for(int rowid = 0; rowid < ds->row_set->len; rowid++) {
         struct row_struct * row;
         row = (struct row_struct *)g_ptr_array_index(ds->row_set, rowid);
 
-        run_sql("DELETE FROM dictionary.columns WHERE dbname=='%s' AND tbname='%s';",
+        run_sql("DELETE FROM dictionary.columns WHERE dbname=='%s' AND tbname=='%s';",
                 dbname, row->data[0]);
     }
     dataset_destroy(ds);

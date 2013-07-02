@@ -142,6 +142,7 @@ struct update_info {
 struct update_info * update_info_new_instance();
 void update_info_destroy(struct update_info * ui);
 int update_info_run(struct update_info * ui);
+void myg_expression_destroy(void * exp);
 
 /* ========================= delete info ======================== */
 

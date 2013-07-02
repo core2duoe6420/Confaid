@@ -79,6 +79,12 @@ void update_info_destroy(struct update_info * ui)
     g_ptr_array_free(ui->cond.conds, TRUE);
 }
 
+//对record_destroy的封装
+static void myg_record_destroy(void * rec)
+{
+    record_destroy((struct record *)rec);
+}
+
 int update_info_run(struct update_info * ui)
 {
     struct dataset * ds;
@@ -90,10 +96,18 @@ int update_info_run(struct update_info * ui)
 
     ds = dataset_judge_condition(ds, &ui->cond, 1);
 
+    int count = ds->row_set->len;
     struct record * rec;
-    rec = record_new_instance(tb);
-    for(int rowid = 0; rowid < ds->row_set->len; rowid++) {
+    //update过程中可能会违反约束，所以等到所有约束检查完毕后一起写入
+    //之前的所有record存放在该队列中
+    GPtrArray * rec_queue;
+    rec_queue = g_ptr_array_sized_new(count);
+    g_ptr_array_set_free_func(rec_queue, myg_record_destroy);
+
+    for(int rowid = 0; rowid < count; rowid++) {
         struct row_struct * row;
+        rec = record_new_instance(tb);
+        g_ptr_array_add(rec_queue, rec);
         row = (struct row_struct *)g_ptr_array_index(ds->row_set, rowid);
         record_bind_rnode(rec, &row->rnode);
         record_read_buffer(rec);
@@ -147,18 +161,21 @@ int update_info_run(struct update_info * ui)
                     sprintf(ui->info, "SQL: constraint violation %s FOREIGN KEY %s.%s",
                             col->c_name, col->c_fk_tbname, col->c_fk_colname);
                     dataset_destroy(ds);
-                    record_destroy(rec);
+                    g_ptr_array_free(rec_queue, TRUE);
                     return -1;
                 }
             }
             //检查完毕
             record_column_set_value_by_name(rec, col->c_name, value_addr);
         }
-        //写入新数据
+    }
+    //检查完毕，写回所有数据
+    for(int recid = 0; recid < count; recid++) {
+        struct record * rec;
+        rec = (struct record *)g_ptr_array_index(rec_queue, recid);
         record_write_buffer(rec);
     }
-    int count = ds->row_set->len;
-    record_destroy(rec);
+    g_ptr_array_free(rec_queue, TRUE);
     dataset_destroy(ds);
     return count;
 }

@@ -30,10 +30,8 @@ struct sql_info * sql_info_new_instance() {
     sql = (struct sql_info *)g_malloc0(sizeof(struct sql_info));
     assert(sql);
 
-    //condition_set中的condition最终会被引用到其他结构的condition中
-    //所以不需要free
     sql->condition_set = g_ptr_array_sized_new(8);
-
+    g_ptr_array_set_free_func(sql->condition_set, myg_condition_destroy);
     //cur_col_set用于切换column_set和cond_refcol
     sql->cur_col_set = g_ptr_array_sized_new(8);
     g_ptr_array_set_free_func(sql->cur_col_set, myg_char_strdup_destroy);
@@ -47,8 +45,8 @@ struct sql_info * sql_info_new_instance() {
     sql->value_set = g_ptr_array_sized_new(8);
     g_ptr_array_set_free_func(sql->value_set, myg_char_strdup_destroy);
 
-    //与condition同理，expression指针会被引用到其他ptrarray中，不需要释放
     sql->expression_set = g_ptr_array_sized_new(2);
+    g_ptr_array_set_free_func(sql->expression_set, myg_expression_destroy);
 
     sql->col_data_def = g_ptr_array_sized_new(8);
     g_ptr_array_set_free_func(sql->col_data_def, myg_char_strdup_destroy);
@@ -59,7 +57,11 @@ struct sql_info * sql_info_new_instance() {
     return sql;
 }
 
-void sql_info_destroy(struct sql_info * sql)
+/* condition_set和expression_set中的指针在SQL正确的情况下
+ * 会被其他SQL_info结构引用，所以不应该释放
+ * 但SQL语法分析错误时，不会被其他结构引用，所以需要释放
+ */
+void sql_info_destroy(struct sql_info * sql, int extra_free)
 {
     for(int i = 0; i < sql->condition_set->len; i++)
         if(sql->cond_refcol_set[i])
@@ -90,9 +92,9 @@ void sql_info_destroy(struct sql_info * sql)
     if(sql->value_set)
         g_ptr_array_free(sql->value_set, TRUE);
     if(sql->condition_set)
-        g_ptr_array_free(sql->condition_set, FALSE);
+        g_ptr_array_free(sql->condition_set, extra_free);
     if(sql->expression_set)
-        g_ptr_array_free(sql->expression_set, FALSE);
+        g_ptr_array_free(sql->expression_set, extra_free);
     g_free(sql);
 }
 
@@ -735,9 +737,9 @@ struct dataset * sql_info_run(struct sql_info * sql) {
         if(structure == NULL) {
             ds = dataset_error(sql->info);
         } else {
-            affected_row_count = insert_info_run((struct insert_info *)structure);
+            insert_info_run((struct insert_info *)structure);
             insert_info_destroy((struct insert_info *)structure);
-            ds = dataset_info("%d row affected", affected_row_count);
+            ds = dataset_info("1 row inserted");
         }
         break;
     case SQL_DELETE:
@@ -830,7 +832,7 @@ static struct dataset * _run_sql(char * sql) {
     else
         ds = dataset_error(cur_sql->info);
 
-    sql_info_destroy(cur_sql);
+    sql_info_destroy(cur_sql, result);
     cur_sql = lastsql;
     return ds;
 }
