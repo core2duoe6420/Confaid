@@ -4,8 +4,6 @@
 #include <assert.h>
 #include <stdarg.h>
 
-#include "database.h"
-#include "rnode.h"
 #include "sql.h"
 
 struct select_info * select_info_new_instance() {
@@ -40,7 +38,7 @@ struct dataset * select_info_run(struct select_info * si) {
     for(int i = 1; i < si->tables->len; i++) {
         struct table * tmptb;
         tmptb = (struct table *)g_ptr_array_index(si->tables, i);
-        tmp = dataset_traverse_table(tmptb, tmptb->tb_col_nr, 0);
+        tmp = dataset_traverse_table(tmptb, 0, tmptb->tb_col_nr);
         //原来的ds和tmp应该都会被销毁
         ds = dataset_join(ds, tmp);
     }

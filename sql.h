@@ -2,6 +2,7 @@
 #define __SELECT_H
 
 #include <glib.h>
+
 #include "table.h"
 #include "rnode.h"
 
@@ -170,6 +171,10 @@ int insert_info_run(struct insert_info * ii);
 #define SQL_INSERT 2
 #define SQL_DELETE 3
 #define SQL_UPDATE 4
+#define SQL_CREATE_DB 5
+#define SQL_USE_DB 6
+#define SQL_DROP_DB 7
+#define SQL_CREATE_TB 8
 
 /* 除特殊情况，其他GPtrArray存放的都是char*指针 */
 struct sql_info {
@@ -186,9 +191,16 @@ struct sql_info {
     GPtrArray * condition_set;
     char cond_formula[EXP_MAX];
 
+    //UPDATE语句SET后的表达式
     GPtrArray * exp_refcol_set[EXP_MAX];
     /* 存放的是struct expression *指针 */
     GPtrArray * expression_set;
+
+    //CREATE TABLE语句列的定义
+    GPtrArray * cur_col_def;
+    GPtrArray * col_data_def;
+    GPtrArray * col_def_set[EXP_MAX];
+
 
     char info[EXP_MAX];
     int info_offset;

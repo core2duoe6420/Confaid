@@ -26,6 +26,7 @@ struct table {
     struct database * tb_db;
     struct column * tb_cols;
     int tb_col_nr;
+    //该值在创建实例后为0，之后需要单独设置
     int tb_record_size;
     //struct record * tb_record;
     struct table * tb_next;
@@ -40,6 +41,7 @@ struct record {
 
 struct table * table_create(struct database * db, char * tb_name, int colnr, int rec_size);
 struct table * table_new_instance(struct database * db, char * db_name, int colnr);
+void table_destroy(struct table * tb);
 struct table * table_get_by_name(struct database * db, char * tb_name);
 
 struct block * table_get_block(struct table * tb);

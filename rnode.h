@@ -3,6 +3,9 @@
 
 #include <stddef.h>
 
+//for struct block
+#include "database.h"
+
 #define RNODE_ITEM 3
 
 #define MAGIC_DELETE 0xAA

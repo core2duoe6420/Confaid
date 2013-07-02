@@ -5,7 +5,9 @@
 
 #include "sql.h"
 
+#ifndef __LINUX__
 #pragma comment(lib, "compute_exp.lib")
+#endif
 
 struct condition * condition_new_instance(int type, char * exp1, char * exp2) {
     struct condition * cond;

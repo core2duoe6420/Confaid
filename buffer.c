@@ -4,7 +4,9 @@
 #include <string.h>
 #include <glib.h>
 
+#include "datafile.h"
 #include "buffer.h"
+#include "database.h" //for buffer_delete_database
 
 #define BUFFER_SIZE_DEFUALT (64*1024*1024)
 
@@ -194,6 +196,19 @@ void buffer_delete(struct buffer * buf)
     release_buffer_header(buf);
 
     g_free(buf);
+}
+
+//关闭数据库时使用，清除数据库中所有db的buffer
+void buffer_database_delete(struct database * db)
+{
+    struct buffer * buf, * tmp;
+    buf = global_bh->bh_list_head.b_lru_next;
+    while(buf->b_data) {
+        tmp = buf;
+        buf = buf->b_lru_next;
+        if(tmp->b_df == db->d_df)
+            buffer_delete(tmp);
+    }
 }
 
 void buffer_set_dirty(struct buffer * buf)

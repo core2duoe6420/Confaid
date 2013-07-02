@@ -11,8 +11,8 @@
 #endif
 
 #include "database.h"
-#include "rnode.h"
 #include "table.h"
+#include "sql.h" //for check_record_count
 
 #define DIC_FILENAME "confaid.dic"
 #define DIC_DBNAME "dictionary"
@@ -160,6 +160,14 @@ void dic_column_insert(struct column * col)
     struct table * tb;
     tb = table_get_by_name(dic_db, DIC_TABLE_COLUMNS);
     _dic_column_insert(tb, col);
+}
+
+//检查名字为dbname的database是否存在
+int dic_check_dbname(char * dbname)
+{
+    struct table * tb = table_get_by_name(dic_db, DIC_TABLE_DATABASE);
+    struct column * col = table_get_column(tb, "dbname");
+    return check_record_count(col, DIC_DBNAME, DIC_TABLE_DATABASE, dbname);
 }
 
 //数据字典存在时读取信息

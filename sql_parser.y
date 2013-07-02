@@ -44,8 +44,9 @@ int strreplace(char * str, const char * source, const char * dest, int max);
 %token UNIQUE UPDATE USE VALUES WHERE WORK
 
 %type <charval> '+' '-' '*' '/' '(' ')'
-%type <strval> database_name table_name column column_ref
+%type <strval> database_name table_name column column_ref data_type
 %type <strval> search_condition scalar_exp atom	literal	select_exp
+%type <strval> column_def_opt
 %%
 
 sql_list:
@@ -54,16 +55,16 @@ sql_list:
 	;
 
 sql:	
-		USE database_name 
-	|	CREATE DATABASE database_name
-	|	DROP DATABASE database_name
+		USE database_name								{ cur_sql->type = SQL_USE_DB; }
+	|	CREATE DATABASE database_name block_size_def	{ cur_sql->type = SQL_CREATE_DB; }
+	|	DROP DATABASE database_name						{ cur_sql->type = SQL_DROP_DB; }
 	|	DROP TABLE table_name
 	|	ALTER TABLE table_name alter_operation
-	|	base_table_def
+	|	base_table_def									{ cur_sql->type = SQL_CREATE_TB; }
 	;
 	
 database_name:
-	    NAME 
+	    NAME					{ g_ptr_array_add(cur_sql->database_set, strdup($1)); }
 	;
 
 alter_operation:
@@ -76,46 +77,49 @@ alter_operation:
 	
 	/* 创建表 */
 base_table_def:
-		CREATE TABLE table_name block_size_def '(' base_table_element_commalist ')'
+		CREATE TABLE table_name '(' base_table_element_commalist ')' {
+			g_ptr_array_add(cur_sql->table_set, strdup($3));
+			cur_sql->column_set = cur_sql->cur_col_set;
+			cur_sql->cur_col_set = NULL;
+		}
 	;
 	
 block_size_def:
 		/* empty */
-	| 	BLOCK_SIZE '=' INTNUM 
+	| 	BLOCK_SIZE '=' INTNUM	{ char tmp[1024]; sprintf(tmp, "%d", $3);
+									g_ptr_array_add(cur_sql->value_set, strdup(tmp)); }
 	;
 
 base_table_element_commalist:
-		base_table_element
-	|	base_table_element_commalist ',' base_table_element
-	;
-
-base_table_element:
 		column_def
-	|	table_constraint_def
+	|	base_table_element_commalist ',' column_def
 	;
 	
     /* 字段定义 */
 column_def:
-		column data_type column_def_opt_list
+		column data_type column_def_opt_list {
+			cur_sql->col_def_set[cur_sql->cur_col_set->len] = cur_sql->cur_col_def;
+
+			cur_sql->cur_col_def = g_ptr_array_sized_new(4);
+			g_ptr_array_set_free_func(cur_sql->cur_col_def, myg_char_strdup_destroy);
+
+			g_ptr_array_add(cur_sql->cur_col_set, strdup($1));
+			g_ptr_array_add(cur_sql->col_data_def, strdup($2));
+		}
 	;
 
 column_def_opt_list:
 		/* empty */
-	|	column_def_opt_list column_def_opt
+	|	column_def_opt_list column_def_opt			{ g_ptr_array_add(cur_sql->cur_col_def, strdup($2)); }
 	;
 
 column_def_opt:
-		NOT NULLX
-	|	NOT NULLX UNIQUE
-	|	NOT NULLX PRIMARY KEY
+		NOT NULLX									{ sprintf($$, "NOTNULL"); }			
+	|	UNIQUE										{ sprintf($$, "UNIQUE"); }
+	|	PRIMARY KEY									{ sprintf($$, "PRIMARYKEY"); }
+	|	FOREIGN KEY REFERENCES NAME '(' column ')'	{ sprintf($$, "FOREIGNKEY %s.%s", $4, $6); }
 	;
 
-table_constraint_def:
-		UNIQUE '(' column_commalist ')'
-	|	PRIMARY KEY '(' column_commalist ')'
-	|	FOREIGN KEY '(' column_commalist ')'
-			REFERENCES table_name '(' column_commalist ')'
-	;
 
 column_commalist:
 		column										{ g_ptr_array_add(cur_sql->cur_col_set, strdup($1)); }
@@ -349,10 +353,9 @@ column_ref:
 
 	/* 数据类型 支持INT DOUBLE CHAR三种*/
 data_type:
-		CHARACTER
-	|	CHARACTER '(' INTNUM ')'
-	|	INTEGER
-	|	DOUBLE
+		CHARACTER '(' INTNUM ')'			{ sprintf($$, "%lf", $3); }
+	|	INTEGER								{ sprintf($$, "-1"); }
+	|	DOUBLE								{ sprintf($$, "-2"); }
 	;
 
 	/* the various things you can name */

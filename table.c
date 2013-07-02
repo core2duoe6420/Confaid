@@ -204,6 +204,12 @@ struct table * table_new_instance(struct database * db, char * db_name, int coln
     return tb;
 }
 
+void table_destroy(struct table * tb)
+{
+    g_free(tb->tb_cols);
+    g_free(tb);
+}
+
 struct block * table_get_block(struct table * tb) {
     struct block * b = tb->tb_db->d_block;
     while(b) {
@@ -214,6 +220,7 @@ struct block * table_get_block(struct table * tb) {
     return NULL;
 }
 
+/* 内部方法，仅用于数据字典 */
 int table_insert_record(struct table * tb, ...)
 {
     struct block * b;

@@ -8,7 +8,7 @@
 #include "datafile.h"
 #include "table.h"
 #include "buffer.h"
-#include "rnode.h"
+#include "sql.h"
 
 struct database * cur_db = NULL;
 struct database * db_set = NULL;
@@ -130,7 +130,7 @@ void piece_set_zero(struct block * b, int pid)
     piece_destroy(dirtyp);
 }
 
-static void block_header_create(struct block * b, int offset,
+static void block_header_create(struct block * b, int offset, int next_block,
                                 char * tb_name, size_t piece_size)
 {
     assert(sizeof(struct block_header) <= piece_size);
@@ -143,7 +143,7 @@ static void block_header_create(struct block * b, int offset,
     bh->piecenr = (block_size + piece_size - 1) / piece_size;
     bh->rnode_per_piece = piece_size / sizeof(struct rnode_d);
     bh->tb_continue = 0;
-    bh->next_block = 0;
+    bh->next_block = next_block;
     bh->bitmap_size = (bh->piecenr + 7) / 8;
     bh->start_pid = (bh->bitmap_size + piece_size - 1) / piece_size + 1;
     bh->block_start = offset;
@@ -165,20 +165,30 @@ static void block_header_initial(struct block * b, int offset)
     bh = &b->header;
     block_read_buffer(b, offset);
 
+    //已删除的block不需要读取位图
+    if(bh->type == BLOCK_DELETED)
+        return;
+
     bitmap_create(&b->bitmap, bh->piecenr);
     b->bitmap_offset = bh->block_start + bh->piece_size;
     bitmap_read_buffer(b->db->d_df, &b->bitmap, b->bitmap_offset);
     bitmap_count_usable(&b->bitmap);
 }
 
-//该函数会将新block插入到db->block链表中
+//该函数会将block->db设置为db，但不会操作db中的block链表
 static struct block * block_new_instance(struct database * db) {
     struct block * b;
-    b = (struct block *)g_malloc(sizeof(struct block));
+    b = (struct block *)g_malloc0(sizeof(struct block));
 
     assert(b);
 
-    b->next = NULL;
+    b->db = db;
+    return b;
+}
+
+//该函数会将b插入到db的block链表中
+static void block_bind_database(struct block * b, struct database * db)
+{
     b->db = db;
     if(db) {
         b->prev = db->d_block;
@@ -186,11 +196,12 @@ static struct block * block_new_instance(struct database * db) {
             db->d_block->next = b;
         db->d_block = b;
     }
-    b->tb_next = NULL;
-    b->tb_prev = NULL;
+}
 
-    b->last_get_rnode_pid = 0;
-    return b;
+static void block_destroy(struct block * b)
+{
+    g_free(b->bitmap.bits);
+    g_free(b);
 }
 
 //从文件中读取所有block信息
@@ -198,10 +209,18 @@ int database_read_block(struct database * db)
 {
     struct block * b;
     int offset = DATABASE_HEADER_SIZE;
+
+    if(db->d_header.dh_filelen == offset)
+        return 0;
+
     do {
         b = block_new_instance(db);
+        block_bind_database(b, db);
         block_header_initial(b, offset);
         offset = b->header.next_block;
+
+        if(b->header.type == BLOCK_DELETED)
+            continue;
 
         struct block * odd;
         odd = b->prev;
@@ -217,44 +236,58 @@ int database_read_block(struct database * db)
     return 0;
 }
 
-//在数据文件末尾创建block
+//先查找block链表，如果有BLCOK_DELETED则使用，如果没有在数据文件末尾创建一个
 struct block * database_create_block(struct database * db, char * tb_name, size_t piece_size) {
-    struct block * b;
-    b = block_new_instance(db);
+    struct block * b = db->d_block;
+    int newblock = 0;
+    while(b) {
+        if(b->header.type == BLOCK_DELETED)
+            break;
+        b = b->prev;
+    }
+    //没有删除的块，创建一个
+    if(b == NULL) {
+        newblock = 1;
+        b = block_new_instance(db);
+        block_bind_database(b, db);
+        assert(b);
+    }
+    int block_start = newblock ? db->d_header.dh_filelen : b->header.block_start;
+    int next_block = newblock ? 0 : b->header.next_block;
+    block_header_create(b, block_start, next_block, tb_name, piece_size);
 
-    assert(b);
+    struct block * old;
 
-    block_header_create(b, db->d_header.dh_filelen, tb_name, piece_size);
-
-    struct block * odd;
-    //block_create会把b插入到db->block链表中
-    odd = b->prev;
-    while(odd) {
+    old = b->prev;
+    while(old) {
         //同一张表
-        if(strcmp(tb_name, odd->header.tb_name) == 0) {
-            if(odd->header.tb_continue == 0) {
-                odd->header.tb_continue = db->d_header.dh_filelen;
-                block_write_buffer(odd, odd->header.block_start);
-                odd->tb_next = b;
-                b->tb_prev = odd;
+        if(strcmp(tb_name, old->header.tb_name) == 0) {
+            if(old->header.tb_continue == 0) {
+                old->header.tb_continue = db->d_header.dh_filelen;
+                block_write_buffer(old, old->header.block_start);
+                old->tb_next = b;
+                b->tb_prev = old;
             }
         }
-        if(odd->header.next_block == 0) {
-            odd->header.next_block = db->d_header.dh_filelen;
-            block_write_buffer(odd, odd->header.block_start);
+        if(newblock && old->header.next_block == 0) {
+            old->header.next_block = db->d_header.dh_filelen;
+            block_write_buffer(old, old->header.block_start);
         }
-        odd = odd->prev;
+        old = old->prev;
     }
-    db->d_header.dh_filelen += db->d_header.dh_block_size;
-    db->d_header.dh_blocknr++;
-    database_header_write_buffer(db);
+
+    if(newblock) {
+        db->d_header.dh_filelen += db->d_header.dh_block_size;
+        db->d_header.dh_blocknr++;
+        database_header_write_buffer(db);
+    }
     return b;
 }
 
 //block信息也会读取完成
 struct database * _database_initial(char * db_file) {
     struct database * db;
-    db = (struct database *)g_malloc(sizeof(struct database));
+    db = (struct database *)g_malloc0(sizeof(struct database));
     assert(db);
 
     db->d_df = datafile_open(db_file);
@@ -271,9 +304,10 @@ struct database * _database_initial(char * db_file) {
     return db;
 }
 
+//_database_create和_database_initial都会将db插入到db_set链表中
 struct database * _database_create(char * db_file, char * db_name, size_t block_size) {
     struct database * db;
-    db = (struct database *)g_malloc(sizeof(struct database));
+    db = (struct database *)g_malloc0(sizeof(struct database));
     assert(db);
 
     db->d_df = datafile_create(db_file);
@@ -292,26 +326,130 @@ struct database * _database_create(char * db_file, char * db_name, size_t block_
     return db;
 }
 
-struct database * normal_database_create(char * db_file, char * db_name, size_t block_size) {
+struct database * normal_database_create(char * db_name, size_t block_size) {
+    char db_file[NAMEMAX_LEN + 1];
+    sprintf(db_file, "%s.cdf", db_name);
+
     struct database * db;
     db = _database_create(db_file, db_name, block_size);
+    //插入到数据字典中
     dic_database_insert(db_name, db_file);
     return db;
 }
 
-struct dabatase * normal_database_open(char * db_name) {
-    //struct database * db;
-    //struct record * rec;
-    //rec = search_dic_database(db_name);
+struct database * normal_database_open(char * db_name) {
+    struct database * db;
 
-    //assert(rec);
+    char * dbfile;
 
-    //char * dbfile;
-    //dbfile = (char*)record_column_get_value_by_name(rec, "dbfile");
+    struct dataset * ds;
+    struct row_struct * row;
+    ds = run_sql("SELECT dbfile FROM dictionary.databases WHERE dbname=='%s';", db_name);
+    row = (struct row_struct *)g_ptr_array_index(ds->row_set, 0);
+    dbfile = (char*)row->data[0];
 
-    //db = _database_initial(dbfile);
+    db = _database_initial(dbfile);
 
-    //assert(db);
+    dataset_destroy(ds);
 
-    return NULL;
+    assert(db);
+
+    struct block * b = db->d_block;
+
+    while(b) {
+        struct table * tb;
+        char * tbname;
+        tbname = b->header.tb_name;
+        tb = table_get_by_name(db, tbname);
+
+        if(tb == NULL) {
+            ds = run_sql("SELECT * FROM dictionary.columns WHERE dbname=='%s' AND tbname=='%s';",
+                         db_name, tbname);
+            tb = table_new_instance(db, b->header.tb_name, ds->row_set->len);
+            int size = 0;
+            for(int i = 0; i < ds->row_set->len; i++) {
+                row = (struct row_struct *)g_ptr_array_index(ds->row_set, i);
+                memcpy(&tb->tb_cols[i], row->data[0], sizeof(struct column));
+                int temp = tb->tb_cols[i].c_offset + tb->tb_cols[i].c_size;
+                size = temp > size ? temp : size;
+            }
+            dataset_destroy(ds);
+            tb->tb_record_size = size;
+        }
+        b = b->prev;
+    }
+
+    return db;
+}
+
+void database_close(char * dbname)
+{
+    struct database * db = db_set, * prev = db_set;
+    while(db) {
+        if(strcmp(db->d_header.dh_name, dbname) == 0)
+            break;
+        prev = db;
+        db = db->d_next_db;
+    }
+    //数据字典不允许关闭
+    if(db == dic_db)
+        return;
+
+    //数据库已经打开，关闭
+    if(db) {
+        //是否是当前数据库？
+        if(db == cur_db)
+            cur_db = NULL;
+        //释放所有该数据库缓存
+        buffer_database_delete(db);
+        //释放所有block
+        struct block * b = db->d_block, * tmpb;
+        while(b) {
+            tmpb = b;
+            b = b->prev;
+            block_destroy(tmpb);
+        }
+
+        //释放所有table
+        struct table * tb = db->d_table, * tmptb;
+        while(tb) {
+            tmptb = tb;
+            tb = tb->tb_next;
+            table_destroy(tmptb);
+        }
+
+        if(prev == db_set)
+            db_set = db->d_next_db;
+        else
+            prev->d_next_db = db->d_next_db;
+
+        //关闭数据文件
+        datafile_close(db->d_df);
+        g_free(db);
+    }
+}
+
+void database_drop(char * dbname)
+{
+    //先关闭数据库
+    database_close(dbname);
+
+    struct dataset * ds;
+    ds = run_sql("SELECT tbname FROM dictionary.tables WHERE dbname=='%';", dbname);
+    for(int rowid = 0; rowid < ds->row_set->len; rowid++) {
+        struct row_struct * row;
+        row = (struct row_struct *)g_ptr_array_index(ds->row_set, rowid);
+
+        run_sql("DELETE FROM dictionary.columns WHERE dbname=='%s' AND tbname='%s';",
+                dbname, row->data[0]);
+    }
+    dataset_destroy(ds);
+
+    run_sql("DELETE FROM dictionary.tables WHERE dbname=='%s';", dbname);
+
+    ds = run_sql("SELECT dbfile FROM dictionary.databases WHERE dbname=='%s';", dbname);
+    remove((char*)((struct row_struct *)g_ptr_array_index(ds->row_set, 0))->data[0]);
+    dataset_destroy(ds);
+
+    run_sql("DELETE FROM dictionary.databases WHERE dbname=='%s';", dbname);
 }

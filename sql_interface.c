@@ -4,16 +4,18 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
+
 #include "sql.h"
+
 
 #define TEMP_SQL_FILE "temp.sql"
 #define TEMP_RESULT_FILE "result.tmp"
 
 extern int yyparse();
 extern FILE * yyin, * yyout;
-void un_sql();
+void switch_buffer(char * buf);
+void delete_buffer();
 void start_sql();
-
 struct sql_info * cur_sql = NULL;
 
 
@@ -48,16 +50,17 @@ struct sql_info * sql_info_new_instance() {
     //与condition同理，expression指针会被引用到其他ptrarray中，不需要释放
     sql->expression_set = g_ptr_array_sized_new(2);
 
+    sql->col_data_def = g_ptr_array_sized_new(8);
+    g_ptr_array_set_free_func(sql->col_data_def, myg_char_strdup_destroy);
+
+    sql->cur_col_def = g_ptr_array_sized_new(8);
+    g_ptr_array_set_free_func(sql->cur_col_def, myg_char_strdup_destroy);
+
     return sql;
 }
 
 void sql_info_destroy(struct sql_info * sql)
 {
-    if(sql->cur_col_set)
-        g_ptr_array_free(sql->cur_col_set, TRUE);
-    if(sql->column_set)
-        g_ptr_array_free(sql->column_set, TRUE);
-
     for(int i = 0; i < sql->condition_set->len; i++)
         if(sql->cond_refcol_set[i])
             g_ptr_array_free(sql->cond_refcol_set[i], TRUE);
@@ -65,6 +68,20 @@ void sql_info_destroy(struct sql_info * sql)
     for(int i = 0; i < sql->expression_set->len; i++)
         if(sql->exp_refcol_set[i])
             g_ptr_array_free(sql->exp_refcol_set[i], TRUE);
+
+    for(int i = 0; i < sql->col_data_def->len; i++)
+        if(sql->col_def_set[i])
+            g_ptr_array_free(sql->col_def_set[i], TRUE);
+
+    if(sql->cur_col_def)
+        g_ptr_array_free(sql->cur_col_def, TRUE);
+    if(sql->col_data_def)
+        g_ptr_array_free(sql->col_data_def, TRUE);
+
+    if(sql->cur_col_set)
+        g_ptr_array_free(sql->cur_col_set, TRUE);
+    if(sql->column_set)
+        g_ptr_array_free(sql->column_set, TRUE);
 
     if(sql->database_set)
         g_ptr_array_free(sql->database_set, TRUE);
@@ -80,7 +97,7 @@ void sql_info_destroy(struct sql_info * sql)
 }
 
 //将NAME.NAME的格式分解到prefix和name，例如tablename.colname或者dbname.tbname
-void static resolve_name(char * source, char * prefix, char * name)
+static void resolve_name(char * source, char * prefix, char * name)
 {
     char * pos = NULL;
     //单部分
@@ -97,7 +114,6 @@ void static resolve_name(char * source, char * prefix, char * name)
     return;
 }
 
-
 struct database * get_database(char * dbname) {
     if(dbname == NULL || dbname[0] == 0)
         return cur_db;
@@ -105,6 +121,15 @@ struct database * get_database(char * dbname) {
     struct database * db = db_set;
     while(db && strcmp(db->d_header.dh_name, dbname) != 0)
         db = db->d_next_db;
+
+    //如果db为NULL，先查db是否存在于数据字典，如果存在，说明没有打开
+    if(db == NULL) {
+        int exist = 0;
+        exist = dic_check_dbname(dbname);
+        if(exist == 1)
+            db = normal_database_open(dbname);
+    }
+
     return db;
 }
 
@@ -124,6 +149,53 @@ struct column * get_column(struct table * tb, char * colname) {
             return &tb->tb_cols[i];
 
     return NULL;
+}
+
+static int sql_create_database(struct sql_info * sql)
+{
+    char * dbname;
+    dbname = (char *)g_ptr_array_index(sql->database_set, 0);
+    if(dic_check_dbname(dbname) != 0) {
+        sprintf(sql->info, "SQL: DATABASE %s exists", dbname);
+        return 1;
+    }
+    int block_size = DEFAULT_BLOCK_SIZE;
+    if(sql->value_set->len > 0)
+        block_size = atoi((char*)g_ptr_array_index(sql->value_set, 0));
+
+    normal_database_create(dbname, block_size * 1024 * 1024);
+    return 0;
+}
+
+static int sql_use_databaase(struct sql_info * sql)
+{
+    char * dbname;
+    dbname = (char *)g_ptr_array_index(sql->database_set, 0);
+
+    struct database * tmpdb = cur_db;
+
+    if((cur_db = get_database(dbname)) == NULL) {
+        sprintf(sql->info, "SQL: DATABASE %s not exists", dbname);
+        cur_db = tmpdb;
+        return 1;
+    }
+
+    return 0;
+}
+
+static int sql_drop_database(struct sql_info * sql)
+{
+    char * dbname;
+    dbname = (char *)g_ptr_array_index(sql->database_set, 0);
+
+    if(get_database(dbname) == NULL) {
+        sprintf(sql->info, "SQL: DATABASE %s not exists", dbname);
+        return 1;
+    }
+
+    database_drop(dbname);
+
+    return 0;
 }
 
 int check_record_count(struct column * col, char * dbname, char * tbname, char * value)
@@ -163,11 +235,11 @@ int check_string_operator(char * exp)
 }
 
 /* 该函数仅供sql_info_to_x转换函数使用，用于检查table是否存在
- * 表名引用分为两种，一种为NAME，一种为DBNAME.NAME，该函数仅适应前者
  * 会修改db所指向的值，如果出错，会往sql->error_info写入出错信息
  */
 static struct table * check_table_name(GPtrArray * tbname_set, int idx_in_set,
-                                       struct database ** db, struct sql_info * sql) {
+                                       struct database ** db, struct sql_info * sql,
+                                       char * tbname) {
     char * value_in_set;
     struct table * tb;
     char prefix[EXP_MAX], name[EXP_MAX];
@@ -177,6 +249,9 @@ static struct table * check_table_name(GPtrArray * tbname_set, int idx_in_set,
     tb = get_table(*db, name);
     if(tb == NULL)
         sprintf(sql->info, "SQL: table %s not exists", value_in_set);
+
+    if(tbname)
+        strcpy(tbname, name);
 
     return tb;
 }
@@ -228,6 +303,134 @@ static struct column * check_column_name(GPtrArray * colname_set, int idx_in_set
     return col;
 }
 
+
+static int sql_create_table(struct sql_info * sql)
+{
+    struct table * tb;
+    struct database * db;
+    char tbname[EXP_MAX];
+    tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
+    if(tb != NULL) {
+        sql->info[0] = 0;
+        return 1;
+    }
+    //表名不得超出长度
+    if(strlen(tbname) > NAMEMAX_LEN) {
+        sprintf(sql->info, "SQL: table name %s exceeds limit", tbname);
+        return 1;
+    }
+    struct column * tmpcols;
+    tmpcols = (struct column *)g_malloc0(sizeof(struct column) *
+                                         sql->column_set->len);
+    assert(tmpcols);
+
+    //遍历所有列信息
+    int rec_size = 0;
+    for(int i = 0; i < sql->column_set->len; i++) {
+        char * colname;
+        colname = (char *)g_ptr_array_index(sql->column_set, i);
+        if(strlen(colname) > NAMEMAX_LEN) {
+            sprintf(sql->info, "SQL: column name %s exceeds limit", colname);
+            g_free(tmpcols);
+            return 1;
+        }
+        strcpy(tmpcols[i].c_name, colname);
+        strcpy(tmpcols[i].c_dbname, db->d_header.dh_name);
+        strcpy(tmpcols[i].c_tbname, tbname);
+
+        //列的数据类型定义规则为，INT -1 DOUBLE -2 大于0则为CHAR，见sql_parser.y
+        char * coltype_str;
+        int coltype;
+        int colsize;
+        coltype_str = (char *)g_ptr_array_index(sql->col_data_def, i);
+        coltype = atoi(coltype_str);
+        if(coltype >= 0 && coltype < 8) {
+            //字符串长度不得太小
+            sprintf(sql->info, "SQL: CHAR type column %s too small, at least 8", colname);
+            g_free(tmpcols);
+            return 1;
+        }
+        if(coltype < 0)
+            coltype = - coltype;
+        tmpcols[i].c_type = coltype > 2 ? COL_CHAR : coltype;
+
+        //列大小
+        if(coltype == COL_INT)
+            colsize = sizeof(int);
+        else if(coltype == COL_DOUBLE)
+            colsize = sizeof(double);
+        else
+            colsize = coltype + 1;
+        tmpcols[i].c_size = colsize;
+
+        tmpcols[i].c_offset = rec_size;
+        rec_size += tmpcols[i].c_size;
+
+        //各种约束
+        GPtrArray * coldef;
+        coldef = sql->col_def_set[i];
+        for(int defidx = 0; defidx < coldef->len; defidx++) {
+            char * def;
+            char * fkname;
+            def = (char *)g_ptr_array_index(coldef, defidx);
+            if(strcmp(def, "NOTNULL") == 0)
+                tmpcols[i].c_notnull = 1;
+            else if(strcmp(def, "UNIQUE") == 0)
+                tmpcols[i].c_unique = 1;
+            else if(strcmp(def, "PRIMARYKEY") == 0)
+                tmpcols[i].c_pri_key = 1;
+            else if(strstr(def, "FOREIGNKEY") != NULL) {
+                //外键约束，需要检查外键是否存在
+                fkname = strchr(def, ' ') + 1;
+                char fktbname[EXP_MAX], fkcolname[EXP_MAX];
+                resolve_name(fkname, fktbname, fkcolname);
+                struct table * fktb;
+                fktb = get_table(db, fktbname);
+                if(fktb == NULL) {
+                    sprintf(sql->info, "SQL: table %s not exists", fktbname);
+                    g_free(tmpcols);
+                    return 1;
+                }
+                struct column * fkcol;
+                fkcol = table_get_column(fktb, fkcolname);
+                if(fkcol == NULL) {
+                    sprintf(sql->info, "SQL: FOREIGN KEY %s not exists", fkname);
+                    g_free(tmpcols);
+                    return 1;
+                }
+                //类型要一致
+                if(fkcol->c_type != tmpcols[i].c_type) {
+                    sprintf(sql->info, "SQL: FOREIGN KEY %s type inconsistent", fkname);
+                    g_free(tmpcols);
+                    return 1;
+                }
+                //检查完毕
+                strcpy(tmpcols[i].c_fk_tbname, fktbname);
+                strcpy(tmpcols[i].c_fk_colname, fkcolname);
+            }
+        }
+    }
+
+    //信息收集完毕
+    struct table * newtb;
+    struct dataset * ds;
+    newtb = table_create(db, tbname, sql->column_set->len, rec_size);
+    ds = run_sql("INSERT INTO dictionary.tables VALUES('%s','%s');", tbname, db->d_header.dh_name);
+    dataset_destroy(ds);
+    for(int i = 0; i < sql->column_set->len; i++) {
+        struct column * newcol;
+        newcol = &newtb->tb_cols[i];
+        memcpy(newcol, &tmpcols[i], sizeof(struct column));
+        ds = run_sql("INSERT INTO dictionary.columns VALUES(%d,%d,%d,%d,'%s','%s','%s',%d,'%s','%s',%d);",
+                     newcol->c_type, newcol->c_size, newcol->c_notnull, newcol->c_pri_key, newcol->c_name,
+                     newcol->c_tbname, newcol->c_dbname, newcol->c_offset, newcol->c_fk_tbname, newcol->c_fk_colname,
+                     newcol->c_unique);
+        dataset_destroy(ds);
+    }
+    g_free(tmpcols);
+    return 0;
+}
+
 struct update_info * sql_info_to_update_info(struct sql_info * sql) {
     //表达式数量和列数一致
     assert(sql->column_set->len == sql->expression_set->len);
@@ -239,7 +442,7 @@ struct update_info * sql_info_to_update_info(struct sql_info * sql) {
     struct table * tb;
 
     //表引用
-    tb = check_table_name(sql->table_set, 0, &db, sql);
+    tb = check_table_name(sql->table_set, 0, &db, sql, NULL);
     if(tb == NULL) {
         update_info_destroy(ui);
         return NULL;
@@ -330,7 +533,7 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
     assert(sql->table_set->len == 1);
 
     //检查table
-    tb = check_table_name(sql->table_set, 0, &db, sql);
+    tb = check_table_name(sql->table_set, 0, &db, sql, NULL);
     if(tb == NULL) {
         insert_info_destroy(ii);
         return NULL;
@@ -369,6 +572,13 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
         char * value = NULL;
         if(valueidx >= 0)
             value = (char *)g_ptr_array_index(sql->value_set, valueidx);
+
+        //CHAR类型的字段需要检查长度
+        if(col->c_type == COL_CHAR && value && strlen(value) > col->c_size - 1) {
+            sprintf(sql->info, "SQL: value exceeds column %s size", col->c_name);
+            insert_info_destroy(ii);
+            return NULL;
+        }
         //是否违反NOT NULL约束？
         if(col->c_notnull != 0 && value == NULL) {
             sprintf(sql->info, "SQL: constraint violation %s NOT NULL", col->c_name);
@@ -386,7 +596,7 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
             }
         }
         //是否违反外键约束？
-        if(value && strcmp(col->c_fk_colname, "") != 0 &&
+        if(value && strcmp(value, "") != 0 && strcmp(col->c_fk_colname, "") != 0 &&
            strcmp(col->c_fk_colname, CHAR_NULL) != 0) {
             char * dbname = tb->tb_db->d_header.dh_name;
             struct table * fktb = table_get_by_name(db, col->c_fk_tbname);
@@ -402,7 +612,7 @@ struct insert_info * sql_info_to_insert_info(struct sql_info * sql) {
         }
 
         //检查完毕，设置值。注意，这些值全是char*，如果为为空，则是NULL指针
-        if(value)
+        if(value != NULL)
             g_ptr_array_add(ii->values, strdup(value));
         else
             g_ptr_array_add(ii->values, NULL);
@@ -418,7 +628,7 @@ struct delete_info * sql_info_to_delete_info(struct sql_info * sql) {
     struct table * tb;
 
     //表引用
-    tb = check_table_name(sql->table_set, 0, &db, sql);
+    tb = check_table_name(sql->table_set, 0, &db, sql, NULL);
     if(tb == NULL) {
         delete_info_destroy(di);
         return NULL;
@@ -445,7 +655,7 @@ struct select_info * sql_info_to_select_info(struct sql_info * sql) {
     char * value_in_set;
     //表引用
     for(int i = 0; i < sql->table_set->len; i++) {
-        tb = check_table_name(sql->table_set, i, &db, sql);
+        tb = check_table_name(sql->table_set, i, &db, sql, NULL);
         if(tb == NULL) {
             select_info_destroy(si);
             return NULL;
@@ -508,6 +718,7 @@ struct dataset * dataset_info(char * info, ...) {
 struct dataset * sql_info_run(struct sql_info * sql) {
     void * structure;
     struct dataset * ds = NULL;
+    int result = 0;
     int affected_row_count;
     switch(sql->type) {
     case SQL_SELECT:
@@ -553,47 +764,64 @@ struct dataset * sql_info_run(struct sql_info * sql) {
 
         }
         break;
+    case SQL_CREATE_DB:
+        result = sql_create_database(sql);
+        if(result == 0)
+            ds = dataset_info("DATABASE created");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_USE_DB:
+        result = sql_use_databaase(sql);
+        if(result == 0)
+            ds = dataset_info("DATABASE opened");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_DROP_DB:
+        result = sql_drop_database(sql);
+        if(result == 0)
+            ds = dataset_info("DATABASE droped");
+        else
+            ds = dataset_error(sql->info);
+        break;
+    case SQL_CREATE_TB:
+        result = sql_create_table(sql);
+        if(result == 0)
+            ds = dataset_info("TABLE created");
+        else
+            ds = dataset_error(sql->info);
+        break;
     }
     return ds;
 }
 
-int analyze_sql(char * infile)
+int analyze_sql(char * sql)
 {
     //不允许重入！
     static int in_sql = 0;
     assert(in_sql == 0);
 
     in_sql = 1;
-    un_sql();
-    yyin = fopen(infile, "r");
-    if(yyin == NULL)
-        return 1;
+    switch_buffer(sql);
 
     int ret;
     start_sql();
     ret = yyparse();
-    fclose(yyin);
-    un_sql();
-    remove(infile);
+    delete_buffer();
 
     in_sql = 0;
     return ret;
 }
 
 static struct dataset * _run_sql(char * sql) {
-    FILE * fp;
-    fp = fopen(TEMP_SQL_FILE, "w");
-    assert(fp);
-
-    fprintf(fp, sql);
-    fclose(fp);
     //lastsql用于嵌套查询，该值保存在栈中
     struct sql_info * lastsql;
     lastsql = cur_sql;
     cur_sql = sql_info_new_instance();
 
     int result;
-    result = analyze_sql(TEMP_SQL_FILE);
+    result = analyze_sql(sql);
 
     struct dataset * ds;
 
@@ -624,12 +852,14 @@ void main()
     initial_dictionary();
     cur_db = dic_db;
     //search_dic_database("dictionary");
+    char sql[1024];
     struct dataset * ds;
-    ds = run_sql("UPDATE columns SET offset=colname;");
-    if(ds)
+    gets(sql);
+    while(strcmp(sql, "exit") != 0) {
+        ds = run_sql(sql);
         dataset_print(ds);
-    ds = run_sql("SELECT tbname,colname,offset,prikey FROM columns;");
-    if(ds)
-        dataset_print(ds);
+        dataset_destroy(ds);
+        gets(sql);
+    }
     buffer_flush();
 }

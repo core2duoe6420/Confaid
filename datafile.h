@@ -10,5 +10,6 @@ struct datafile {
 
 struct datafile * datafile_open(char * filename);
 struct datafile * datafile_create(char * filename);
+void datafile_close(struct datafile * df);
 
 #endif

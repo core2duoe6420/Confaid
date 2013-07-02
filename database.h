@@ -4,12 +4,15 @@
 #include <stddef.h>
 
 #include "global.h"
-
 #include "bitmap.h"
 
 struct column;
 
 #define DATABASE_HEADER_SIZE 4096
+//创建DB时没有指定BLOCK_SIZE时使用，单位M
+#define DEFAULT_BLOCK_SIZE 10
+
+#define BLOCK_DELETED 3
 
 struct block_header {
     char tb_name[NAMEMAX_LEN + 1]; 	//块所属的表名
@@ -75,6 +78,10 @@ void piece_set_zero(struct block * b, int pid);
 struct block * database_create_block(struct database * db, char * tb_name, size_t piece_size);
 struct database * _database_create(char * db_file, char * db_name, size_t block_size);
 struct database * _database_initial(char * db_file);
+struct database * normal_database_create(char * db_name, size_t block_size);
+struct database * normal_database_open(char * db_name);
+void database_close(char * dbname);
+void database_drop(char * dbname);
 
 //dictionary.c
 void initial_dictionary();
@@ -82,10 +89,13 @@ void dic_column_insert(struct column * col);
 void dic_table_insert(char * dbstr, char * filestr);
 void dic_database_insert(char * dbstr, char * filestr);
 
-struct record * search_dic_database(char * dbname);
+int dic_check_dbname(char * dbname);
+
+
 
 extern struct database * dic_db;
 extern struct database * cur_db;
 extern struct database * db_set;
+
 
 #endif

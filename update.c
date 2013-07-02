@@ -5,7 +5,6 @@
 #include <glib.h>
 
 #include "sql.h"
-#include "rnode.h"
 
 
 void myg_expression_destroy(void * exp)

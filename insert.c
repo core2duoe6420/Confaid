@@ -5,7 +5,6 @@
 #include <assert.h>
 
 #include "sql.h"
-#include "table.h"
 
 void myg_value_destroy(void * value)
 {

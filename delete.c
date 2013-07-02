@@ -5,7 +5,6 @@
 #include <glib.h>
 
 #include "sql.h"
-#include "rnode.h"
 
 
 struct delete_info * delete_info_new_instance() {

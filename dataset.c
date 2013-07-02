@@ -5,7 +5,6 @@
 #include <assert.h>
 
 #include "sql.h"
-#include "table.h"
 
 struct column * table_set_get_column(GPtrArray * tableset, char * colname) {
     for(int i = 0; i < tableset->len; i++) {

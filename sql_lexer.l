@@ -116,6 +116,19 @@ void yyerror(char *s)
 	cur_sql->info_offset += n;
 }
 
+static YY_BUFFER_STATE state;
+
+void switch_buffer(char * buf)
+{
+	state = yy_scan_string(buf);
+	yy_switch_to_buffer(state);
+}
+
+void delete_buffer()
+{
+	yy_delete_buffer(state);
+}
+
 void un_sql()
 {
 	BEGIN INITIAL;

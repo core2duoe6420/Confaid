@@ -6,7 +6,6 @@
 
 #include "rnode.h"
 #include "buffer.h"
-#include "database.h"
 
 void rnode_read_buffer(struct rnode_m * rn)
 {
