@@ -6,7 +6,7 @@
 #include <stdarg.h>
 
 #include "sql.h"
-#include "buffer.h" //for buffer_table_delete
+#include "buffer.h" //for buffer_flush
 
 #define TEMP_SQL_FILE "temp.sql"
 #define TEMP_RESULT_FILE "result.tmp"
@@ -500,8 +500,8 @@ static int sql_drop_table(struct sql_info * sql)
     }
     record_destroy(rec);
 
-    //清除缓存中与table有关的项
-    buffer_table_delete(tb);
+    //写回脏缓存，保证一致性
+    buffer_flush();
 
     //从db的tb链表中删除
     struct table ** prev = &db->d_table;

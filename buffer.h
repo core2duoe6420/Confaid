@@ -42,6 +42,5 @@ int structure_read_buffer(struct datafile * df, void * structure, size_t size, i
 int structure_write_buffer(struct datafile * df, void * structure, size_t size, int offset);
 
 void buffer_database_delete(struct database * db);
-void buffer_table_delete(struct table * tb);
 
 #endif

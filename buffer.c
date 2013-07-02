@@ -212,36 +212,6 @@ void buffer_database_delete(struct database * db)
     }
 }
 
-static int is_buffer_in_table_block(struct buffer * buf, struct table * tb)
-{
-    int buf_offset = buf->b_bid * global_bh->bh_block_size;
-    struct block * b = table_get_block(tb);
-    while(b) {
-        int block_start = b->header.block_start;
-        int block_end = b->header.next_block;
-        if(buf_offset >= block_start && buf_offset < block_end)
-            return 1;
-
-        b = b->tb_prev;
-    }
-    return 0;
-}
-
-//删除表时使用
-void buffer_table_delete(struct table * tb)
-{
-    struct database * db = tb->tb_db;
-    struct buffer * buf, * tmp;
-    buf = global_bh->bh_list_head.b_lru_next;
-    while(buf->b_data) {
-        tmp = buf;
-        buf = buf->b_lru_next;
-        if(tmp->b_df == db->d_df &&
-           is_buffer_in_table_block(tmp, tb))
-            buffer_delete(tmp);
-    }
-}
-
 void buffer_set_dirty(struct buffer * buf)
 {
     if(buf->b_dirty)
