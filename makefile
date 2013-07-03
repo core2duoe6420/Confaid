@@ -16,4 +16,4 @@ Confaid:$(OBJS)
 
 .PHONY:clean
 clean:
-	rm -f *.o *.d Confaid
+	rm -f *.o *.d *.dic *.cdf Confaid

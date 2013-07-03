@@ -239,10 +239,31 @@ struct database * _dictionary_create() {
     return db;
 }
 
+static int get_file_length(char * fname)
+{
+    FILE * fp;
+    fp = fopen(fname, "rb");
+    if(fp == NULL)
+        return -1;
+
+    fseek(fp, 0, SEEK_END);
+    int len = ftell(fp);
+    fclose(fp);
+
+    return len;
+}
+
 void initial_dictionary()
 {
-    if(access(DIC_FILENAME, 0) == 0)
-        dic_db = _dictionary_initial();
-    else
+    if(access(DIC_FILENAME, 0) == 0) {
+        if(get_file_length(DIC_FILENAME) == 0) {
+            //数据字典存在但长度为0，说明文件损坏
+            remove(DIC_FILENAME);
+            dic_db = _dictionary_create();
+        } else {
+            dic_db = _dictionary_initial();
+        }
+    } else {
         dic_db = _dictionary_create();
+    }
 }

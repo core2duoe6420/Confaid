@@ -254,6 +254,12 @@ static struct table * check_table_name(GPtrArray * tbname_set, int idx_in_set,
     }
 
     *db = get_database(prefix);
+
+    if(*db == NULL) {
+        sprintf(sql->info, "SQL: database %s not exists", prefix);
+        return NULL;
+    }
+
     tb = get_table(*db, name);
     if(tb == NULL)
         sprintf(sql->info, "SQL: table %s not exists", value_in_set);
@@ -324,6 +330,9 @@ static int sql_create_table(struct sql_info * sql)
     }
     //no database using?
     if(tb == NULL && strcmp(sql->info, "SQL: no database using") == 0)
+        return 1;
+
+    if(db == NULL)
         return 1;
 
     //表名不得超出长度
@@ -1063,19 +1072,19 @@ struct dataset * run_sql(char * sql, ...) {
     return _run_sql(sqlstr);
 }
 
-void main()
-{
-    initial_buffer(1024 * 1024, 4096);
-    initial_dictionary();
-    //search_dic_database("dictionary");
-    char sql[1024];
-    struct dataset * ds;
-    gets(sql);
-    while(strcmp(sql, "exit") != 0) {
-        ds = run_sql(sql);
-        dataset_print(ds);
-        dataset_destroy(ds);
-        gets(sql);
-    }
-    buffer_flush();
-}
+//void main()
+//{
+//    initial_buffer(1024 * 1024, 4096);
+//    initial_dictionary();
+//    //search_dic_database("dictionary");
+//    char sql[1024];
+//    struct dataset * ds;
+//    gets(sql);
+//    while(strcmp(sql, "exit") != 0) {
+//        ds = run_sql(sql);
+//        dataset_print(ds);
+//        dataset_destroy(ds);
+//        gets(sql);
+//    }
+//    buffer_flush();
+//}
