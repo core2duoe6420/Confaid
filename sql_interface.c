@@ -325,7 +325,7 @@ static int sql_create_table(struct sql_info * sql)
     char tbname[EXP_MAX];
     tb = check_table_name(sql->table_set, 0, &db, sql, tbname);
     if(tb != NULL) {
-        strcpy("SQL: table %s exists", tbname);
+        sprintf(sql->info, "SQL: table %s exists", tbname);
         return 1;
     }
     //no database using?

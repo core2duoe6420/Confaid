@@ -76,7 +76,11 @@ int server_socket_create(char * server_ip, int port)
     }
 
     int value = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&value, sizeof(value));
+    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR,
+                  (const char *)&value, sizeof(value)) != 0) {
+        fprintf(stderr, "Error when setting socket\n");
+        exit(1);
+    }
 
     struct sockaddr_in my_addr;
     my_addr.sin_addr.S_ADDR = inet_addr(server_ip);
@@ -216,6 +220,14 @@ int main()
         printf("get socket:%d, client ip:%s, port:%d\n",
                client_fd, client_ipstr, ntohs(client_addr.sin_port));
 
+        //…Ë÷√≥¨ ±
+        struct timeval timeout = {10, 0};
+        if(setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                      (const char *)&timeout, sizeof(struct timeval)) != 0) {
+            fprintf(stderr, "Error when setting timeout\n");
+            break;
+        }
+
         char sqlbuf[1024];
         int recvn;
         int closed = 0;
@@ -237,6 +249,7 @@ int main()
             socket_send_dataset(client_fd, ds);
             dataset_destroy(ds);
         }
+        printf("socket %d closed\n", client_fd);
         if(closed)
             break;
     }

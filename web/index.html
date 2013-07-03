@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>sql</title>
+  <link href="css/TBase.css" rel="stylesheet" type="text/css" />
+  <link href="css/TB02.css" rel="stylesheet" type="text/css" />
+  <link href="css/TDarkUI.css" rel="stylesheet" type="text/css" />
+  <link href="css/sql.css" rel="stylesheet" type="text/css" />
+  <script type="text/javascript" src="js/prefixfree.min.js"></script>
+</head>
+<body>
+	<div class="container">
+		<h1 class="title">Confaid<h1/>
+		<form class="form TClearfix">
+			<textarea class="input"></textarea>
+			<a class="submit TB02 TB02-black" onclick="submit()"> Submit</a>&nbsp;&nbsp;
+			<a class="history TB02 TB02-black" onclick="history()"> History</a>&nbsp;&nbsp;
+			<a class="create TB02 TB02-black" onclick="create()"> Create</a>
+		</form>
+		<div class="result-container">
+			<div class="result"><table class="result-table"></table></div>
+			<div class="newtable">
+				<select class="database"></select>&nbsp;&nbsp;
+				<input class="TDark-input tablename" type="text" placeholder="Table Name..." />&nbsp;&nbsp;
+				<a class="newLine TB02 TB02-black" onclick="newLine()"> New Column</a>
+				<form class="create-form">
+					<p>
+						<input class="TDark-input columnname" type="text" placeholder="Column Name..." />&nbsp;&nbsp;
+						<select class="datatype" onchange="charNum(this)">
+							<option value="INT">INT</option>
+							<option value="DOUBLE">DOUBLE</option>
+							<option value="CHAR">CHAR</option>
+						</select>&nbsp;&nbsp;
+						<input class="TDark-input charnum disable" type="text" placeholder="Number..." disabled="true"/>&nbsp;&nbsp;
+						<span class="TDark-checkbox">
+							<input type="checkbox" class="primary" id="primary1" name="ckeckbox" />
+							<label for="primary1" data-on="a"></label>&nbsp;
+							<span class="tip"> Primary Key</span>
+						</span>
+						<span class="TDark-checkbox">
+							<input type="checkbox" class="notnull" id="notnull1" name="ckeckbox" />
+							<label for="notnull1" data-on="a"></label>&nbsp;
+							<span class="tip"> Not Null</span>
+						</span>
+						<span class="TDark-checkbox">
+							<input type="checkbox" class="unique" id="unique1" name="ckeckbox" />
+							<label for="unique1" data-on="a"></label>&nbsp;
+							<span class="tip"> Unique</span>
+						</span>
+						<input class="TDark-input fktable" type="text" placeholder="FKtable..." />&nbsp;&nbsp;
+						<input class="TDark-input fkcolumn" type="text" placeholder="FKcolumn..." />&nbsp;&nbsp;
+						<a class="delete TB02 TB02-black" onclick="deleteColumn(this)"> Delete</a>
+					</p>
+				</form>
+				<a class="generate TB02 TB02-black" onclick="generate()"> Generate</a>
+			</div>
+		</div>
+	</div>
+</body>
+<script type="text/javascript" src="js/TLib.js"></script>
+<script type="text/javascript" src="js/ajax.js"></script>
+<script type="text/javascript" src="js/sql.js"></script>
+</html>
