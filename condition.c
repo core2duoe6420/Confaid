@@ -5,6 +5,8 @@
 
 #include "sql.h"
 
+#define is_alpha(x) (((x)>='a' && (x) <='z') || ((x)>='A' && (x) <='Z'))
+
 struct condition * condition_new_instance(int type, char * exp1, char * exp2) {
     struct condition * cond;
     cond = (struct condition *)g_malloc0(sizeof(struct condition));
@@ -130,9 +132,14 @@ int condition_judge(struct condition * cond, struct row_struct * row, GPtrArray 
         strreplace(tmp2, tablename, valuestr, EXP_MAX);
         sprintf(tablename, "%s", ref->c_name);
         char * pos;
-        if((pos = strstr(tmp1, tablename)) && *(pos - 1) != '.')
+        //必须要是一个完整的单词才能进行列名替换
+        if((pos = strstr(tmp1, tablename)) && *(pos - 1) != '.'
+           && (pos == tmp1 || (!is_alpha(*(pos - 1))))
+           && !is_alpha(*(pos + strlen(tablename))))
             strreplace(tmp1, tablename, valuestr, EXP_MAX);
-        if((pos = strstr(tmp2, tablename)) && *(pos - 1) != '.')
+        if((pos = strstr(tmp2, tablename)) && *(pos - 1) != '.'
+           && (pos == tmp2 || (!is_alpha(*(pos - 1))))
+           && !is_alpha(*(pos + strlen(tablename))))
             strreplace(tmp2, tablename, valuestr, EXP_MAX);
     }
 
