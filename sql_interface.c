@@ -157,6 +157,12 @@ static int sql_create_database(struct sql_info * sql)
 {
     char * dbname;
     dbname = (char *)g_ptr_array_index(sql->database_set, 0);
+
+    if(strlen(dbname) > NAMEMAX_LEN) {
+        sprintf(sql->info, "SQL: database name exceeds limit");
+        return 1;
+    }
+
     if(dic_check_dbname(dbname) != 0) {
         sprintf(sql->info, "SQL: DATABASE %s exists", dbname);
         return 1;
@@ -1072,19 +1078,21 @@ struct dataset * run_sql(char * sql, ...) {
     return _run_sql(sqlstr);
 }
 
-//void main()
-//{
-//    initial_buffer(1024 * 1024, 4096);
-//    initial_dictionary();
-//    //search_dic_database("dictionary");
-//    char sql[1024];
-//    struct dataset * ds;
-//    gets(sql);
-//    while(strcmp(sql, "exit") != 0) {
-//        ds = run_sql(sql);
-//        dataset_print(ds);
-//        dataset_destroy(ds);
-//        gets(sql);
-//    }
-//    buffer_flush();
-//}
+/*
+void main()
+{
+    initial_buffer(1024 * 1024, 4096);
+    initial_dictionary();
+    //search_dic_database("dictionary");
+    char sql[1024];
+    struct dataset * ds;
+    gets(sql);
+    while(strcmp(sql, "exit") != 0) {
+        ds = run_sql(sql);
+        dataset_print(ds);
+        dataset_destroy(ds);
+        gets(sql);
+    }
+    buffer_flush();
+}
+*/
