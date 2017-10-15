@@ -1,10 +1,10 @@
-#Confaid
+# Confaid
 
 A very very simpilified relational DB for application software design course.
 
-##Compile
+## Compile
 
-###Linux
+### Linux
 
 To compile, we need **glib2.0** and **flex** package. Use to yum or apt-get to install these packages. For example:
 
@@ -14,7 +14,7 @@ and use make to compile:
 
 	# make
 
-###Windows
+### Windows
 
 Windows is a little more complicated.
 
@@ -49,7 +49,7 @@ or (note: CR is only for good-looking, there is no CR in actual data.)
 	</row>
 	end
 
-##Supported SQL
+## Supported SQL
 Confaid supports only a very simplified SQL and the key word must be upper character. Here is the support list:
 
 - Simple query, projection and join
@@ -89,6 +89,7 @@ For example, the following SQL is acceptable:
 	SELECT student.name
 	FROM student,selected_course 
 	WHERE student.id==selected_course.stu;
-##What is Confaid?
+	
+## What is Confaid?
 
 >Confaid means Confucious Said. Black humor, uh-huh :-)
